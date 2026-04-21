@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Карта — Хабаровск, ул. Тихоокеанская</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #f4f6f8;
+    }
+    .page {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    header {
+      padding: 1rem 1.25rem;
+      background: #2c3e50;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+    header h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+    header p {
+      margin: 0;
+      font-size: 0.85rem;
+      opacity: 0.9;
+    }
+    #map {
+      flex: 1;
+      min-height: 320px;
+    }
+    .note {
+      font-size: 0.75rem;
+      opacity: 0.75;
+      margin-top: 0.5rem;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.65rem 1rem;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(255,255,255,0.2);
+    }
+    .toolbar button {
+      cursor: pointer;
+      padding: 0.45rem 0.85rem;
+      border: none;
+      border-radius: 6px;
+      background: #3498db;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .toolbar button:hover {
+      background: #5dade2;
+    }
+    .toolbar button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .toolbar label {
+      font-size: 0.8rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .toolbar input[type="number"] {
+      width: 4.25rem;
+      padding: 0.25rem 0.4rem;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.95);
+      color: #222;
+    }
+    #geoStatus {
+      flex-basis: 100%;
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+    .nearby-section {
+      flex-shrink: 0;
+      background: #fff;
+      border-bottom: 1px solid #dde2e6;
+      padding: 0.65rem 1rem 0.75rem;
+      max-height: 200px;
+      overflow-y: auto;
+      box-shadow: inset 0 -1px 0 rgba(0,0,0,0.04);
+    }
+    .nearby-section h2 {
+      margin: 0 0 0.35rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+    .nearby-hint {
+      margin: 0 0 0.35rem;
+      font-size: 0.8rem;
+      color: #5c6c7a;
+    }
+    .nearby-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .nearby-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.75rem;
+      cursor: pointer;
+      padding: 0.45rem 0.55rem;
+      margin: 2px -0.25rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      color: #1f2d3a;
+      border: 1px solid transparent;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }
+    .nearby-title {
+      flex: 1;
+      min-width: 0;
+    }
+    .nearby-list li:hover {
+      background: #eaf2fb;
+    }
+    .nearby-list li:focus {
+      outline: none;
+      background: #eaf2fb;
+      border-color: #3498db;
+    }
+    .nearby-dist {
+      flex-shrink: 0;
+      font-size: 0.82rem;
+      color: #5c6c7a;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+  <!-- Замените YOUR_YANDEX_MAPS_API_KEY на ключ с https://developer.tech.yandex.ru/ -->
+  <script src="https://api-maps.yandex.ru/2.1/?apikey=YOUR_YANDEX_MAPS_API_KEY&lang=ru_RU" type="text/javascript"></script>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Наши точки на ул. Тихоокеанская</h1>
+      <p>Хабаровск — две метки на карте с описанием.</p>
+      <p class="note">Если карта не загружается, укажите JavaScript API ключ Яндекс.Карт в атрибуте apikey в подключении скрипта выше. Метки ставятся по координатам; при доступном геокодеру позиция может уточняться.</p>
+      <div class="toolbar">
+        <button type="button" id="btnNearby">Точки рядом со мной</button>
+        <label>
+          Радиус, км
+          <input type="number" id="radiusKm" value="5" min="0.1" max="100" step="0.1" />
+        </label>
+        <label title="Скрыть метки вне круга">
+          <input type="checkbox" id="onlyInRadius" />
+          Только в радиусе
+        </label>
+        <p id="geoStatus" class="note"></p>
+      </div>
+    </header>
+    <section class="nearby-section" aria-label="Точки в радиусе от вас">
+      <h2 id="nearbyHeading">Точки в выбранном радиусе</h2>
+      <p id="nearbyListHint" class="nearby-hint">
+        Нажмите «Точки рядом со мной», чтобы построить список адресов внутри выбранного радиуса (по прямой на карте).
+      </p>
+      <ul id="nearbyList" class="nearby-list"></ul>
+    </section>
+    <div id="map"></div>
+  </div>
+
+  <script type="text/javascript">
+    // Точки: координаты [широта, долгота] — если геокодер недоступен или не находит адрес, метки всё равно появятся.
+    // (координаты проверены по OpenStreetMap; при необходимости подправьте вручную в конструкторе Яндекс.Карт)
+    var locations = [
+      {
+        search: 'Хабаровск, улица Тихоокеанская, 73г',
+        coords: [48.4988374, 135.0399276],
+        balloonContentHeader: 'Тихоокеанская, 73г',
+        balloonContentBody:
+          '<p><strong>Основной пункт приёма</strong></p>' +
+          '<p>Здесь можно оставить заявку на шиномонтаж, согласовать время и забрать заказ.</p>' +
+          '<p><em>Режим:</em> пн–сб 9:00–19:00</p>',
+        balloonContentFooter: 'Телефон уточняйте при записи'
+      },
+      {
+        search: 'Хабаровск, улица Тихоокеанская, 95',
+        coords: [48.5076532, 135.0406448],
+        balloonContentHeader: 'Тихоокеанская, 95',
+        balloonContentBody:
+          '<p><strong>Сервис и склад</strong></p>' +
+          '<p>Вторая точка: хранение сезонных комплектов, выдача предзаказов.</p>' +
+          '<p><em>Парковка:</em> удобный заезд с Тихоокеанской.</p>',
+        balloonContentFooter: 'По предварительному звонку'
+      }
+    ];
+
+    ymaps.ready(function () {
+      var map = new ymaps.Map('map', {
+        center: [48.48, 135.08],
+        zoom: 15,
+        controls: ['zoomControl', 'fullscreenControl', 'geolocationControl']
+      });
+
+      var officePlaces = [];
+      var userPlacemark = null;
+      var radiusCircle = null;
+      var lastUserCoords = null;
+
+      function distanceMeters(a, b) {
+        var R = 6371000;
+        var φ1 = (a[0] * Math.PI) / 180;
+        var φ2 = (b[0] * Math.PI) / 180;
+        var Δφ = ((b[0] - a[0]) * Math.PI) / 180;
+        var Δλ = ((b[1] - a[1]) * Math.PI) / 180;
+        var x =
+          Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+          Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+      }
+
+      function formatDistance(m) {
+        if (m < 1000) {
+          return Math.round(m) + ' м';
+        }
+        return (m / 1000).toFixed(m < 10000 ? 2 : 1) + ' км';
+      }
+
+      function buildBalloon(meta, distanceMetersOpt) {
+        var distHtml =
+          distanceMetersOpt != null
+            ? '<p style="margin:0 0 8px;"><strong>Расстояние от вас:</strong> ' +
+              formatDistance(distanceMetersOpt) +
+              '</p>'
+            : '';
+        return {
+          balloonContentHeader: meta.balloonContentHeader,
+          balloonContentBody: distHtml + meta.balloonContentBody,
+          balloonContentFooter: meta.balloonContentFooter,
+          hintContent:
+            meta.balloonContentHeader +
+            (distanceMetersOpt != null ? ' · ' + formatDistance(distanceMetersOpt) : '')
+        };
+      }
+
+      function addPlacemark(coords, meta) {
+        var props = buildBalloon(meta, null);
+        var placemark = new ymaps.Placemark(coords, props, {
+          preset: 'islands#blueDotIcon'
+        });
+        map.geoObjects.add(placemark);
+        officePlaces.push({ placemark: placemark, meta: meta, coords: coords.slice() });
+        return placemark;
+      }
+
+      function setGeoStatus(text) {
+        var el = document.getElementById('geoStatus');
+        if (el) el.textContent = text || '';
+      }
+
+      function renderNearbyList(userCoords, radiusKm) {
+        var ul = document.getElementById('nearbyList');
+        var hint = document.getElementById('nearbyListHint');
+        var heading = document.getElementById('nearbyHeading');
+        if (!ul) return;
+
+        ul.innerHTML = '';
+        var radiusM = radiusKm * 1000;
+
+        var rows = officePlaces
+          .map(function (op, index) {
+            return {
+              index: index,
+              op: op,
+              d: distanceMeters(userCoords, op.coords)
+            };
+          })
+          .filter(function (row) {
+            return row.d <= radiusM;
+          })
+          .sort(function (a, b) {
+            return a.d - b.d;
+          });
+
+        if (hint) {
+          if (!rows.length) {
+            hint.style.display = '';
+            hint.textContent =
+              'В радиусе ' +
+              radiusKm +
+              ' км от вашей позиции наших точек нет. Увеличьте радиус (км) в панели выше.';
+          } else {
+            hint.style.display = 'none';
+          }
+        }
+        if (heading) {
+          heading.textContent = rows.length
+            ? 'Точки в радиусе ' + radiusKm + ' км — ' + rows.length + ' · ближе к вам выше'
+            : 'Точки в выбранном радиусе';
+        }
+
+        rows.forEach(function (row) {
+          var li = document.createElement('li');
+          li.tabIndex = 0;
+          li.setAttribute('role', 'button');
+          li.setAttribute('data-office-index', String(row.index));
+
+          var titleSpan = document.createElement('span');
+          titleSpan.className = 'nearby-title';
+          titleSpan.textContent = row.op.meta.balloonContentHeader;
+
+          var distSpan = document.createElement('span');
+          distSpan.className = 'nearby-dist';
+          distSpan.textContent = formatDistance(row.d);
+
+          li.appendChild(titleSpan);
+          li.appendChild(distSpan);
+          ul.appendChild(li);
+        });
+      }
+
+      function focusOfficeByIndex(index) {
+        var op = officePlaces[index];
+        if (!op) return;
+        var z = Math.max(map.getZoom(), 16);
+        map.setCenter(op.coords, z, { duration: 300 });
+        if (op.placemark && op.placemark.balloon) {
+          op.placemark.balloon.open();
+        }
+      }
+
+      function removeUserOverlay() {
+        if (userPlacemark) {
+          map.geoObjects.remove(userPlacemark);
+          userPlacemark = null;
+        }
+        if (radiusCircle) {
+          map.geoObjects.remove(radiusCircle);
+          radiusCircle = null;
+        }
+      }
+
+      function applyNearby(userCoords, radiusKm, onlyInRadius) {
+        lastUserCoords = userCoords;
+        var radiusM = radiusKm * 1000;
+        var boundsPoints = [userCoords];
+
+        officePlaces.forEach(function (op) {
+          var d = distanceMeters(userCoords, op.coords);
+          op.placemark.properties.set(buildBalloon(op.meta, d));
+          var inside = d <= radiusM;
+          op.placemark.options.set('visible', onlyInRadius ? inside : true);
+          if (!onlyInRadius || inside) {
+            boundsPoints.push(op.coords);
+          }
+        });
+
+        removeUserOverlay();
+
+        userPlacemark = new ymaps.Placemark(
+          userCoords,
+          {
+            balloonContentHeader: 'Вы здесь',
+            balloonContentBody:
+              '<p>Ваше положение по данным браузера.</p>' +
+              '<p>Радиус на карте: <strong>' +
+              radiusKm +
+              '</strong> км</p>',
+            hintContent: 'Моё местоположение'
+          },
+          { preset: 'islands#redCircleDotIcon' }
+        );
+        map.geoObjects.add(userPlacemark);
+
+        radiusCircle = new ymaps.Circle([userCoords, radiusM], {}, {
+          fillColor: 'rgba(52, 152, 219, 0.15)',
+          strokeColor: '#3498db',
+          strokeOpacity: 0.85,
+          strokeWidth: 2
+        });
+        map.geoObjects.add(radiusCircle);
+
+        var visibleCount = officePlaces.filter(function (op) {
+          return distanceMeters(userCoords, op.coords) <= radiusM;
+        }).length;
+
+        if (onlyInRadius && visibleCount === 0) {
+          setGeoStatus(
+            'В радиусе ' +
+              radiusKm +
+              ' км наших точек нет — увеличьте радиус или снимите «Только в радиусе».'
+          );
+        } else {
+          setGeoStatus(
+            'Показано точек в радиусе: ' +
+              visibleCount +
+              ' из ' +
+              officePlaces.length +
+              ' · радиус ' +
+              radiusKm +
+              ' км'
+          );
+        }
+
+        renderNearbyList(userCoords, radiusKm);
+
+        if (boundsPoints.length >= 2) {
+          map.setBounds(ymaps.util.bounds.fromPoints(boundsPoints), {
+            checkZoomRange: true,
+            zoomMargin: 48
+          });
+        } else if (boundsPoints.length === 1) {
+          map.setCenter(boundsPoints[0], 14);
+        }
+      }
+
+      function findNearby() {
+        var onlyChk = document.getElementById('onlyInRadius');
+        var btn = document.getElementById('btnNearby');
+        var radiusKm = readRadiusKm();
+
+        if (!navigator.geolocation) {
+          setGeoStatus('Геолокация не поддерживается браузером.');
+          return;
+        }
+
+        setGeoStatus('Определяем местоположение…');
+        if (btn) btn.disabled = true;
+
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            if (btn) btn.disabled = false;
+            var lat = pos.coords.latitude;
+            var lon = pos.coords.longitude;
+            var userCoords = [lat, lon];
+            applyNearby(userCoords, radiusKm, !!(onlyChk && onlyChk.checked));
+          },
+          function (err) {
+            if (btn) btn.disabled = false;
+            var msg = 'Не удалось получить координаты';
+            if (err && err.code === 1) msg += ' (доступ запрещён)';
+            else if (err && err.code === 2) msg += ' (позиция недоступна)';
+            else if (err && err.code === 3) msg += ' (таймаут)';
+            setGeoStatus(msg + '. Разрешите доступ к геолокации для сайта или проверьте HTTPS.');
+          },
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }
+        );
+      }
+
+      function readRadiusKm() {
+        var radiusInput = document.getElementById('radiusKm');
+        var radiusKm = parseFloat(radiusInput && radiusInput.value ? radiusInput.value : '5');
+        if (!(radiusKm > 0)) {
+          radiusKm = 5;
+          if (radiusInput) radiusInput.value = String(radiusKm);
+        }
+        return radiusKm;
+      }
+
+      function reapplyNearbyIfLocated() {
+        if (!lastUserCoords) return;
+        var onlyChk = document.getElementById('onlyInRadius');
+        applyNearby(lastUserCoords, readRadiusKm(), !!(onlyChk && onlyChk.checked));
+      }
+
+      document.getElementById('btnNearby').addEventListener('click', findNearby);
+      var radiusEl = document.getElementById('radiusKm');
+      radiusEl.addEventListener('change', reapplyNearbyIfLocated);
+      radiusEl.addEventListener('input', reapplyNearbyIfLocated);
+      document.getElementById('onlyInRadius').addEventListener('change', reapplyNearbyIfLocated);
+
+      var nearbyListEl = document.getElementById('nearbyList');
+      if (nearbyListEl) {
+        nearbyListEl.addEventListener('click', function (e) {
+          var li = e.target && e.target.closest && e.target.closest('li[data-office-index]');
+          if (!li || !nearbyListEl.contains(li)) return;
+          e.preventDefault();
+          var idx = parseInt(li.getAttribute('data-office-index'), 10);
+          if (!isNaN(idx)) focusOfficeByIndex(idx);
+        });
+        nearbyListEl.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          var t = e.target;
+          if (!t || t.tagName !== 'LI' || !t.getAttribute('data-office-index')) return;
+          e.preventDefault();
+          var idx = parseInt(t.getAttribute('data-office-index'), 10);
+          if (!isNaN(idx)) focusOfficeByIndex(idx);
+        });
+      }
+
+      function resolveCoords(item) {
+        return ymaps.geocode(item.search, { results: 1 }).then(
+          function (res) {
+            var first = res.geoObjects.get(0);
+            if (first) {
+              return first.geometry.getCoordinates();
+            }
+            console.warn('Геокодер не вернул точку, берём coords из данных:', item.search);
+            return item.coords;
+          },
+          function () {
+            console.warn('Ошибка геокодера, берём coords из данных:', item.search);
+            return item.coords;
+          }
+        );
+      }
+
+      Promise.all(
+        locations.map(function (item) {
+          return resolveCoords(item);
+        })
+      ).then(function (coordsList) {
+          coordsList.forEach(function (coords, index) {
+            addPlacemark(coords, locations[index]);
+          });
+          if (map.geoObjects.getLength()) {
+            map.setBounds(map.geoObjects.getBounds(), {
+              checkZoomRange: true,
+              zoomMargin: 40
+            });
+          }
+        });
+    });
+  </script>
+</body>
+</html>
